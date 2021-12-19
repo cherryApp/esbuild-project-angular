@@ -1,13 +1,14 @@
 {
   "name": "esbuild-ng-cli",
   "version": "0.0.0",
+  "type": "module",
   "scripts": {
     "ng": "ng",
-    "start": "ng serve",
+    "start": "node ./run-esbuild.js --experimental-modules",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "esbuild": "esbuild src/main.ts --bundle --outfile=dist/main.js --loader:.html=text --minify",
-    "esbuild:watch": "esbuild src/main.ts --bundle --outfile=dist/main.js --loader:.html=text --minify --watch",
+    "esbuild:watch": "esbuild src/main.ts --bundle --outfile=dist/main.js --loader:.html=text --minify --watch --sourcemap",
     "test": "ng test"
   },
   "private": true,
@@ -20,6 +21,7 @@
     "@angular/platform-browser": "~12.1.1",
     "@angular/platform-browser-dynamic": "~12.1.1",
     "@angular/router": "~12.1.1",
+    "esbuild-plugin-text-replace": "^1.1.3",
     "rxjs": "~6.6.0",
     "tslib": "^2.2.0",
     "zone.js": "~0.11.4"
