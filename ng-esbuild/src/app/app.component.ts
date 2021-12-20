@@ -1,14 +1,16 @@
-import { Component } from '@angular/core';
-
-// import template from './app.component.html';
-
-// import styleSheet from './app.component.css';
+import { ChangeDetectionStrategy, Component } from '@angular/core';
 
 @Component({
   selector: 'app-root',
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.css'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AppComponent {
-  title = 'Cserkó Józsefné';
+  title = 'Cserkó Abigél';
+
+  users = [
+    {name: 'Karcsi'},
+    {name: 'Pisti'},
+  ];
 }

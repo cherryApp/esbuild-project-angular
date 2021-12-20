@@ -1,10 +1,9 @@
 {
   "name": "esbuild-ng-cli",
   "version": "0.0.0",
-  "type": "module",
   "scripts": {
     "ng": "ng",
-    "start": "node ./run-esbuild.js --experimental-modules",
+    "start": "node ./run-esbuild.js",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "esbuild": "esbuild src/main.ts --bundle --outfile=dist/main.js --loader:.html=text --minify",
@@ -21,7 +20,6 @@
     "@angular/platform-browser": "~12.1.1",
     "@angular/platform-browser-dynamic": "~12.1.1",
     "@angular/router": "~12.1.1",
-    "esbuild-plugin-text-replace": "^1.1.3",
     "rxjs": "~6.6.0",
     "tslib": "^2.2.0",
     "zone.js": "~0.11.4"
@@ -30,6 +28,7 @@
     "@angular-devkit/build-angular": "~12.1.1",
     "@angular/cli": "~12.1.1",
     "@angular/compiler-cli": "~12.1.1",
+    "@swc/core": "^1.2.121",
     "@types/jasmine": "~3.6.0",
     "@types/node": "^12.11.1",
     "esbuild": "^0.12.15",
@@ -39,6 +38,7 @@
     "karma-coverage": "~2.0.3",
     "karma-jasmine": "~4.0.0",
     "karma-jasmine-html-reporter": "^1.6.0",
-    "typescript": "~4.3.2"
+    "live-server": "^1.2.1",
+    "typescript": "^4.3.5"
   }
 }

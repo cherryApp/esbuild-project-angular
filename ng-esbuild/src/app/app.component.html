@@ -1,4 +1,3 @@
-<p class="title">
-  {{ title }}
-
+<p *ngFor="let item of users | filter">
+  Sir. {{ item.name }}
 </p>
