@@ -1,5 +1,7 @@
 const { build } = require('esbuild');
 const liveServer = require("live-server");
+const path = require('path');
+const fs = require('fs');
 
 const times = [new Date().getTime(), new Date().getTime()];
 
@@ -63,6 +65,11 @@ let angularComponentDecoratorPlugin = {
     let path = require('path');
     let fs = require('fs');
 
+    const dirPath = path.join(__dirname, 'dist');
+    if (!fs.existsSync(dirPath)) {
+      fs.mkdirSync(dirPath);
+    }
+
     let indexFileContent = await fs.promises.readFile(
       path.join(__dirname, 'src/index.html'),
       'utf8',
@@ -73,6 +80,11 @@ let angularComponentDecoratorPlugin = {
     indexFileContent = indexFileContent.replace(
       /\<\/body\>/gm,
       `<script src="esbuild-main.js"></script></body>`
+    );
+
+    indexFileContent = indexFileContent.replace(
+      /\<\/head\>/gm,
+      `<link rel="stylesheet" href="esbuild-main.css"></head>`
     );
 
     await fs.promises.writeFile(
@@ -142,10 +154,10 @@ const liveServerParams = {
   port: 8181, // Set the server port. Defaults to 8080.
   host: "0.0.0.0", // Set the address to bind to. Defaults to 0.0.0.0 or process.env.IP.
   root: "./dist", // Set root directory that's being served. Defaults to cwd.
-  open: true, // When false, it won't load your browser by default.
+  open: false, // When false, it won't load your browser by default.
   // ignore: 'scss,my/templates', // comma-separated string for paths to ignore
   file: "/esbuild-index.html", // When set, serve this file (server root relative) for every 404 (useful for single-page applications)
-  wait: 500, // Waits for all changes, before reloading. Defaults to 0 sec.
+  wait: 1000, // Waits for all changes, before reloading. Defaults to 0 sec.
   // mount: [['/components', './node_modules']], // Mount a directory to a route.
   logLevel: 2, // 0 = errors only, 1 = some, 2 = lots
   middleware: [function (req, res, next) { next(); }] // Takes an array of Connect-compatible middleware that are injected into the server middleware stack
@@ -165,8 +177,11 @@ build({
   minify: true,
   watch: {
     onRebuild(error, result) {
-      if (error) console.error('watch build failed:', error)
-      // else console.log('watch build succeeded:', result)
+      if (error) console.error('watch build failed:', error);
+      else {
+
+        console.log('watch build succeeded:', result);
+      }
     },
   },
   plugins: [
@@ -174,7 +189,7 @@ build({
     scssPlugin,
     angularComponentDecoratorPlugin,
   ],
-}).then(result => {
+}).then( async (result) => {
   if (!liveServerIsRunning) {
     liveServer.start(liveServerParams);
     liveServerIsRunning = true;
