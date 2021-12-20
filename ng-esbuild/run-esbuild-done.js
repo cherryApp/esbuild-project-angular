@@ -3,62 +3,8 @@ const liveServer = require("live-server");
 
 const times = [new Date().getTime(), new Date().getTime()];
 
-let convertMessage = ({ message, start, end }) => {
-  let location
-  if (start && end) {
-    let lineText = source.split(/\r\n|\r|\n/g)[start.line - 1]
-    let lineEnd = start.line === end.line ? end.column : lineText.length
-    location = {
-      file: filename,
-      line: start.line,
-      column: start.column,
-      length: lineEnd - start.column,
-      lineText,
-    }
-  }
-  return { text: message, location }
-}
-
-const scssPlugin = {
-  name: "scss",
-  setup(build) {
-    const path = require("path")
-    const sass = require("sass")
-
-    build.onLoad({ filter: /\.scss$/ }, async args => {
-      try {
-        const result = sass.renderSync({ file: args.path })
-        return {
-          contents: result.css.toString(),
-          // contents: 'body { color: blue; }',
-          loader: "css",
-        }
-      } catch (e) {
-        return { errors: [convertMessage(e)] }
-      }
-
-    })
-  },
-};
-
-const zoneJsPlugin = {
-  name: "zoneJs",
-  setup(build) {
-    const fs = require('fs');
-    build.onLoad({ filter: /main\.ts$/ }, async (args) => {
-      try {
-        const source = await fs.promises.readFile(args.path, 'utf8');
-        const contents = `import 'zone.js';\n${source}`;
-        return { contents, loader: 'ts' };
-      } catch (e) {
-        return { errors: [convertMessage(e)] }
-      }
-    });
-  },
-};
-
 let angularComponentDecoratorPlugin = {
-  name: 'angularDecorator',
+  name: 'example',
   async setup(build) {
     let path = require('path');
     let fs = require('fs');
@@ -67,8 +13,6 @@ let angularComponentDecoratorPlugin = {
       path.join(__dirname, 'src/index.html'),
       'utf8',
     );
-
-    // console.log(indexFileContent)
 
     indexFileContent = indexFileContent.replace(
       /\<\/body\>/gm,
@@ -93,14 +37,32 @@ let angularComponentDecoratorPlugin = {
 
     build.onLoad({ filter: /\.component\.ts$/ }, async (args) => {
       // This converts a message in Svelte's format to esbuild's format
-
+      let convertMessage = ({ message, start, end }) => {
+        let location
+        if (start && end) {
+          let lineText = source.split(/\r\n|\r|\n/g)[start.line - 1]
+          let lineEnd = start.line === end.line ? end.column : lineText.length
+          location = {
+            file: filename,
+            line: start.line,
+            column: start.column,
+            length: lineEnd - start.column,
+            lineText,
+          }
+        }
+        return { text: message, location }
+      }
 
       let getValueByPattern = (regex = new RegExp(''), str = '') => {
         let m;
         let results = [];
 
-        while ((array1 = regex.exec(str)) !== null) {
-          results.push(array1[1]);
+        while ((m = regex.exec(str)) !== null) {
+          if (m.index === regex.lastIndex) {
+            regex.lastIndex++;
+          }
+
+          m.forEach((match, groupIndex) => results.push(match));
         }
 
         return results.pop();
@@ -170,8 +132,6 @@ build({
     },
   },
   plugins: [
-    zoneJsPlugin,
-    scssPlugin,
     angularComponentDecoratorPlugin,
   ],
 }).then(result => {
