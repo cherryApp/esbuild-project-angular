@@ -82,13 +82,13 @@ const indexFileProcessor = {
 
       indexFileContent = indexFileContent.replace(
         /\<\/body\>/gm,
-        `<script src="esbuild-main.js"></script></body>`
+        `<script data-version="0.2" src="esbuild-main.js"></script></body>`
       );
 
-      // indexFileContent = indexFileContent.replace(
-      //   /\<\/head\>/gm,
-      //   `<link rel="stylesheet" href="esbuild-main.css"></head>`
-      // );
+      indexFileContent = indexFileContent.replace(
+        /\<\/head\>/gm,
+        `<link rel="stylesheet" href="esbuild-main.css">\n</head>`
+      );
 
       console.log(indexFileContent);
       await fs.promises.writeFile(
@@ -115,15 +115,25 @@ const angularComponentMetaResolver = {
 let angularComponentDecoratorPlugin = {
   name: 'angularDecorator',
   async setup(build) {
+    const fs = require('fs');
+    const sass = require('sass');
 
     const cssCache = [];
+
+    const scssProcessor = async scssPath => {
+      const result = sass.renderSync({ file: scssPath });
+      cssCache.push(result.css.toString());
+    };
 
     build.onStart(() => {
       console.log('build started');
       times[0] = new Date().getTime();
     });
 
-    build.onEnd(() => {
+    build.onEnd( async () => {
+      const cssPath = path.join(__dirname, 'dist/esbuild-main.css');
+      await fs.promises.writeFile(cssPath, cssCache.join(`\n\n`), 'utf8');
+
       times[1] = new Date().getTime();
       console.log(`EsBuild complete in ${times[1] - times[0]}ms`);
     });
@@ -147,14 +157,24 @@ let angularComponentDecoratorPlugin = {
 
       // Convert Svelte syntax to JavaScript
       try {
-        const templateUrl = getValueByPattern(/^ *templateUrl *\: *['"]*([^'"]*)/gm, source);
-        const styleUrls = getValueByPattern(/^ *styleUrls *\: *\[['"]([^'"\]]*)/gm, source);
 
-        let contents = source.replace(/\@Component/gmi, `
+        let contents = source;
+
+        const templateUrl = getValueByPattern(/^ *templateUrl *\: *['"]*([^'"]*)/gm, source);
+
+        if (/^ *templateUrl *\: *['"]*([^'"]*)/gm.test(contents)) {
+          contents = `
           import templateSource from '${templateUrl}';
-          import styleSheet from '${styleUrls}';
-          @Component
-        `);
+          ${contents}`;
+        }
+
+        if (/^ *styleUrls *\: *\[['"]([^'"\]]*)/gm.test(contents)) {
+          const styleUrls = getValueByPattern(
+            /^ *styleUrls *\: *\[['"]([^'"\]]*)/gm,
+            source
+          );
+          scssProcessor( filename.replace(/\.ts$/, '.scss') );
+        }
 
         contents = contents.replace(
           /^ *templateUrl *\: *['"]*([^'"]*)['"]/gm,
@@ -162,8 +182,7 @@ let angularComponentDecoratorPlugin = {
         );
 
         contents = contents.replace(
-          /^ *styleUrls *\: *\[['"]([^'"\]]*)['"]\]/gm,
-          "styles: [styleSheet || '']"
+          /^ *styleUrls *\: *\[['"]([^'"\]]*)['"]\]\,*/gm, ''
         );
 
         console.log('CONTENTS: ', contents);
@@ -180,10 +199,10 @@ const liveServerParams = {
   port: 8181, // Set the server port. Defaults to 8080.
   host: "0.0.0.0", // Set the address to bind to. Defaults to 0.0.0.0 or process.env.IP.
   root: "./dist", // Set root directory that's being served. Defaults to cwd.
-  open: false, // When false, it won't load your browser by default.
+  open: true, // When false, it won't load your browser by default.
   // ignore: 'scss,my/templates', // comma-separated string for paths to ignore
   file: "/esbuild-index.html", // When set, serve this file (server root relative) for every 404 (useful for single-page applications)
-  wait: 1000, // Waits for all changes, before reloading. Defaults to 0 sec.
+  wait: 500, // Waits for all changes, before reloading. Defaults to 0 sec.
   // mount: [['/components', './node_modules']], // Mount a directory to a route.
   logLevel: 2, // 0 = errors only, 1 = some, 2 = lots
   middleware: [function (req, res, next) { next(); }] // Takes an array of Connect-compatible middleware that are injected into the server middleware stack
@@ -213,10 +232,12 @@ build({
   plugins: [
     indexFileProcessor,
     zoneJsPlugin,
-    scssPlugin,
+    // scssPlugin,
     angularComponentDecoratorPlugin,
   ],
 }).then(async (result) => {
+  console.log(result);
+  console.log(Object.keys(liveServer))
   if (!liveServerIsRunning) {
     liveServer.start(liveServerParams);
     liveServerIsRunning = true;
