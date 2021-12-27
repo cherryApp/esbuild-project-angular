@@ -16,7 +16,8 @@ export class AppComponent {
 
   users = [
     {name: 'Gazsika'},
-    {name: 'Pisti'},
     {name: 'Géza'},
+    {name: 'Jancsi'},
+    {name: 'Marcsi'},
   ];
 }
