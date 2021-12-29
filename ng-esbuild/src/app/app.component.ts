@@ -15,7 +15,7 @@ export class AppComponent {
   listObserver$: Observable<any> = this.list$.asObservable();
 
   users = [
-    {name: 'Gazsika'},
+    {name: 'Gizike'},
     {name: 'Géza'},
     {name: 'Jancsi'},
     {name: 'Marcsi'},

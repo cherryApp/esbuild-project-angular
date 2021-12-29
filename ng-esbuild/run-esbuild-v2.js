@@ -68,9 +68,14 @@ const indexFileProcessor = {
       let path = require('path');
       let fs = require('fs');
 
-      const dirPath = path.join(__dirname, 'dist');
-      if (!fs.existsSync(dirPath)) {
-        fs.mkdirSync(dirPath);
+      const distPath = path.join(__dirname, 'dist');
+      if (!fs.existsSync(distPath)) {
+        fs.mkdirSync(distPath);
+      }
+
+      const esbuildPath = path.join(__dirname, 'dist/esbuild');
+      if (!fs.existsSync(esbuildPath)) {
+        fs.mkdirSync(esbuildPath);
       }
 
       let indexFileContent = await fs.promises.readFile(
@@ -78,39 +83,24 @@ const indexFileProcessor = {
         'utf8',
       );
 
-      console.log(indexFileContent);
-
       indexFileContent = indexFileContent.replace(
         /\<\/body\>/gm,
-        `<script data-version="0.2" src="esbuild-main.js"></script></body>`
+        `<script data-version="0.2" src="main.js"></script></body>`
       );
 
       indexFileContent = indexFileContent.replace(
         /\<\/head\>/gm,
-        `<link rel="stylesheet" href="esbuild-main.css">\n</head>`
+        `<link rel="stylesheet" href="main.css">\n</head>`
       );
 
-      console.log(indexFileContent);
       await fs.promises.writeFile(
-        path.join(__dirname, 'dist/esbuild-index.html'),
+        path.join(__dirname, 'dist/esbuild/index.html'),
         indexFileContent,
         'utf8',
       );
     });
   }
 };
-
-const angularComponentMetaResolver = {
-  name: 'metaResolver',
-  async setup(build) {
-    const path = require('path');
-
-    build.onResolve({ filter: /\.component\.ts$/ }, args => {
-      console.log(args);
-      return { path: args.path };
-    });
-  },
-}
 
 let angularComponentDecoratorPlugin = {
   name: 'angularDecorator',
@@ -131,7 +121,7 @@ let angularComponentDecoratorPlugin = {
     });
 
     build.onEnd( async () => {
-      const cssPath = path.join(__dirname, 'dist/esbuild-main.css');
+      const cssPath = path.join(__dirname, 'dist/esbuild/main.css');
       await fs.promises.writeFile(cssPath, cssCache.join(`\n\n`), 'utf8');
 
       times[1] = new Date().getTime();
@@ -198,10 +188,10 @@ let angularComponentDecoratorPlugin = {
 const liveServerParams = {
   port: 8181, // Set the server port. Defaults to 8080.
   host: "0.0.0.0", // Set the address to bind to. Defaults to 0.0.0.0 or process.env.IP.
-  root: "./dist", // Set root directory that's being served. Defaults to cwd.
+  root: "./dist/esbuild/", // Set root directory that's being served. Defaults to cwd.
   open: true, // When false, it won't load your browser by default.
   // ignore: 'scss,my/templates', // comma-separated string for paths to ignore
-  file: "/esbuild-index.html", // When set, serve this file (server root relative) for every 404 (useful for single-page applications)
+  file: "index.html", // When set, serve this file (server root relative) for every 404 (useful for single-page applications)
   wait: 1000, // Waits for all changes, before reloading. Defaults to 0 sec.
   // mount: [['/components', './node_modules']], // Mount a directory to a route.
   logLevel: 2, // 0 = errors only, 1 = some, 2 = lots
@@ -212,7 +202,7 @@ let liveServerIsRunning = false;
 build({
   entryPoints: ['src/main.ts'],
   bundle: true,
-  outfile: 'dist/esbuild-main.js',
+  outfile: 'dist/esbuild/main.js',
   treeShaking: true,
   loader: {
     '.html': 'text',
@@ -224,9 +214,6 @@ build({
     onRebuild(error, result) {
       if (error) console.error('watch build failed:', error);
       else {
-        for (let k in liveServer) {
-          console.log(k, liveServer[k]);
-        }
         console.log('watch build succeeded:', result);
       }
     },
