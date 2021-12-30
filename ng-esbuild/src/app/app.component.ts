@@ -19,6 +19,6 @@ export class AppComponent {
     {name: 'Géza'},
     {name: 'Jancsi'},
     {name: 'Marcsi'},
-    {name: 'Péter'},
+    {name: 'Cili is a cool girl'},
   ];
 }

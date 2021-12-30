@@ -1,10 +1,28 @@
-const { build } = require('esbuild');
-const liveServer = require("live-server");
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const { exec } = require('child_process');
+
+const { build } = require('esbuild');
 const { WebSocketServer } = require('ws');
+
+let timeStamp = new Date().getTime();
+
+let cssCache = '';
+
+const sass = require('sass');
+
+const isScss = (cssPath) => /\.scss$/.test(cssPath);
+
+const scssProcessor = async scssPath => {
+  const result = sass.renderSync({ file: scssPath });
+  cssCache += `\n\n${result.css.toString()}`;
+};
+
+const cssProcessor = async cssPath => {
+  const result = await fs.promises.readFile(cssPath, 'utf8');
+  cssCache += `\n\n${result}`;
+};
 
 const minimalLiveServer = (root = process.cwd(), port = 4200, socketPort = 8080) => {
 
@@ -76,7 +94,7 @@ const minimalLiveServer = (root = process.cwd(), port = 4200, socketPort = 8080)
     var contentType = mimeTypes[extname] || 'application/octet-stream';
 
     try {
-      let content = await fs.promises.readFile(filePath, 'utf-8');
+      let content = await fs.promises.readFile(filePath, 'utf8');
       response.writeHead(200, ({ ...headers, 'Content-Type': contentType }));
       if (isIndexPage) {
         content = content.replace(/\<\/body\>/g, `${clientScript}\n</body>`);
@@ -85,7 +103,7 @@ const minimalLiveServer = (root = process.cwd(), port = 4200, socketPort = 8080)
     } catch (e) {
       if (e.code == 'ENOENT') {
         response.writeHead(404, ({ ...headers, 'Content-Type': 'text/html' }));
-        response.end('Page Not Found!', 'utf-8');
+        response.end('Page Not Found!', 'utf8');
       } else {
         response.writeHead(500);
         response.end('Sorry, check with the site admin for error: ' + e.code + ', ' + e);
@@ -123,30 +141,6 @@ let convertMessage = ({ message, start, end }) => {
   }
   return { text: message, location }
 }
-
-const scssPlugin = {
-  name: "scss",
-  setup(build) {
-    const path = require("path")
-    const sass = require("sass")
-
-    build.onLoad({ filter: /\.scss$/ }, async args => {
-      try {
-        console.log(args.path);
-        const result = sass.renderSync({ file: args.path, });
-        console.log(result.css.toString());
-        return {
-          contents: result.css.toString(),
-          // contents: 'body { color: blue; }',
-          loader: "css",
-        }
-      } catch (e) {
-        return { errors: [convertMessage(e)] }
-      }
-
-    })
-  },
-};
 
 const zoneJsPlugin = {
   name: "zoneJs",
@@ -193,8 +187,7 @@ const indexFileProcessor = {
 
       indexFileContent = indexFileContent.replace(
         /\<\/head\>/gm,
-        `<meta name="time" value="${new Date().getTime()}">
-        <link rel="stylesheet" href="main.css">
+        `<link rel="stylesheet" href="main.css">
         </head>`
       );
 
@@ -211,14 +204,6 @@ let angularComponentDecoratorPlugin = {
   name: 'angularDecorator',
   async setup(build) {
     const fs = require('fs');
-    const sass = require('sass');
-
-    const cssCache = [];
-
-    const scssProcessor = async scssPath => {
-      const result = sass.renderSync({ file: scssPath });
-      cssCache.push(result.css.toString());
-    };
 
     build.onStart(() => {
       console.log('build started');
@@ -226,9 +211,6 @@ let angularComponentDecoratorPlugin = {
     });
 
     build.onEnd(async () => {
-      const cssPath = path.join(__dirname, 'dist/esbuild/main.css');
-      await fs.promises.writeFile(cssPath, cssCache.join(`\n\n`), 'utf8');
-
       times[1] = new Date().getTime();
       console.log(`EsBuild complete in ${times[1] - times[0]}ms`);
     });
@@ -268,7 +250,11 @@ let angularComponentDecoratorPlugin = {
             /^ *styleUrls *\: *\[['"]([^'"\]]*)/gm,
             source
           );
-          scssProcessor(filename.replace(/\.ts$/, '.scss'));
+          if (isScss(styleUrls)) {
+            await scssProcessor(filename.replace(/\.ts$/, '.scss'));
+          } else {
+            await cssProcessor(filename.replace(/\.ts$/, '.css'));
+          }
         }
 
         contents = contents.replace(
@@ -280,8 +266,6 @@ let angularComponentDecoratorPlugin = {
           /^ *styleUrls *\: *\[['"]([^'"\]]*)['"]\]\,*/gm, ''
         );
 
-        console.log('CONTENTS: ', contents);
-
         return { contents, loader: 'ts' };
       } catch (e) {
         return { errors: [convertMessage(e)] }
@@ -290,17 +274,33 @@ let angularComponentDecoratorPlugin = {
   },
 };
 
-const liveServerParams = {
-  port: 8181, // Set the server port. Defaults to 8080.
-  host: "0.0.0.0", // Set the address to bind to. Defaults to 0.0.0.0 or process.env.IP.
-  root: "./dist/esbuild/", // Set root directory that's being served. Defaults to cwd.
-  open: true, // When false, it won't load your browser by default.
-  // ignore: 'scss,my/templates', // comma-separated string for paths to ignore
-  file: "index.html", // When set, serve this file (server root relative) for every 404 (useful for single-page applications)
-  wait: 1000, // Waits for all changes, before reloading. Defaults to 0 sec.
-  // mount: [['/components', './node_modules']], // Mount a directory to a route.
-  logLevel: 2, // 0 = errors only, 1 = some, 2 = lots
-  middleware: [function (req, res, next) { next(); }] // Takes an array of Connect-compatible middleware that are injected into the server middleware stack
+const cssFinisher = {
+  name: 'angularCssProcessor',
+  async setup(build) {
+    build.onEnd(async () => {
+      const fs = require('fs');
+      const path = require('path');
+      let cache = '';
+
+      const angularSettings = JSON.parse(await fs.promises.readFile(
+        path.join(__dirname, 'angular.json'),
+        'utf8',
+      ));
+
+      const project = Object.entries(angularSettings.projects)[0][1];
+      const baseStylePaths = project.architect.build.options.styles;
+      baseStylePaths.forEach((item = '') => {
+        const itemPath = item.includes('/')
+          ? path.join(__dirname, item)
+          : path.join(__dirname, 'src', item);
+        const content = fs.readFileSync(itemPath, 'utf8');
+        cssCache += `\n\n${content}`;
+      });
+
+      const cssOutputPath = path.join(__dirname, `dist/esbuild/main.css`);
+      await fs.promises.writeFile(cssOutputPath, cssCache, 'utf8');
+    });
+  }
 };
 
 let liveServerIsRunning = false;
@@ -308,7 +308,7 @@ let minimalServer = null;
 build({
   entryPoints: ['src/main.ts'],
   bundle: true,
-  outfile: 'dist/esbuild/main.js',
+  outfile: `dist/esbuild/main.js`,
   treeShaking: true,
   loader: {
     '.html': 'text',
@@ -318,9 +318,10 @@ build({
   minify: false,
   watch: {
     onRebuild(error, result) {
-      if (error) console.error('watch build failed:', error);
+      if (error) console.error('Esbuild: watch build failed:', error);
       else {
-        console.log('watch build succeeded:', result);
+        console.log('Esbuild: watch build succeeded.');
+        timeStamp = new Date().getTime();
         minimalServer.broadcast('location:refresh');
       }
     },
@@ -328,14 +329,10 @@ build({
   plugins: [
     indexFileProcessor,
     zoneJsPlugin,
-    // scssPlugin,
     angularComponentDecoratorPlugin,
+    cssFinisher,
   ],
 }).then(async (result) => {
-  console.log(result);
-  for (let k in liveServer) {
-    console.log(k, liveServer[k]);
-  }
   if (!liveServerIsRunning) {
     // liveServer.start(liveServerParams);
     minimalServer = minimalLiveServer('dist/esbuild/');
