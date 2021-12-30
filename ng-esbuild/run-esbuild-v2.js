@@ -2,6 +2,109 @@ const { build } = require('esbuild');
 const liveServer = require("live-server");
 const path = require('path');
 const fs = require('fs');
+const http = require('http');
+const { exec } = require('child_process');
+const { WebSocketServer } = require('ws');
+
+const minimalLiveServer = (root = process.cwd(), port = 4200, socketPort = 8080) => {
+
+  const wss = new WebSocketServer({ port: socketPort });
+  wss.on('connection', function connection(ws) {
+    ws.on('message', function message(data) {
+      console.log('received: %s', data);
+    });
+
+    ws.send('Esbuild live server started');
+  });
+
+  const broadcast = message => {
+    wss.clients.forEach(function each(client) {
+      if (client.readyState === 1) {
+        client.send(message);
+      }
+    });
+  };
+
+  const clientScript = `<script>
+    const ws = new WebSocket('ws://127.0.0.1:8080');
+    ws.onmessage = m => {
+      if (m.data === 'location:refresh') {
+        location.reload();
+      }
+    }
+  </script>`;
+
+  const server = http.createServer(async (request, response) => {
+    // console.log('request ', request.url);
+
+    const headers = {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "OPTIONS, POST, GET, PUT, PATCH, DELETE",
+      "Access-Control-Max-Age": 0, // No Cache
+    };
+
+    let isIndexPage = false;
+
+    let filePath = '.' + request.url;
+    if (filePath == './') {
+      filePath = path.join(__dirname, root, 'index.html');
+      isIndexPage = true;
+    } else {
+      filePath = path.join(__dirname, root, request.url);
+      isIndexPage = false;
+    }
+
+    var extname = String(path.extname(filePath)).toLowerCase();
+    var mimeTypes = {
+      '.html': 'text/html',
+      '.js': 'text/javascript',
+      '.css': 'text/css',
+      '.json': 'application/json',
+      '.png': 'image/png',
+      '.jpg': 'image/jpg',
+      '.gif': 'image/gif',
+      '.svg': 'image/svg+xml',
+      '.wav': 'audio/wav',
+      '.mp4': 'video/mp4',
+      '.woff': 'application/font-woff',
+      '.ttf': 'application/font-ttf',
+      '.eot': 'application/vnd.ms-fontobject',
+      '.otf': 'application/font-otf',
+      '.wasm': 'application/wasm'
+    };
+
+    var contentType = mimeTypes[extname] || 'application/octet-stream';
+
+    try {
+      let content = await fs.promises.readFile(filePath, 'utf-8');
+      response.writeHead(200, ({ ...headers, 'Content-Type': contentType }));
+      if (isIndexPage) {
+        content = content.replace(/\<\/body\>/g, `${clientScript}\n</body>`);
+      }
+      response.end(content);
+    } catch (e) {
+      if (e.code == 'ENOENT') {
+        response.writeHead(404, ({ ...headers, 'Content-Type': 'text/html' }));
+        response.end('Page Not Found!', 'utf-8');
+      } else {
+        response.writeHead(500);
+        response.end('Sorry, check with the site admin for error: ' + e.code + ', ' + e);
+      }
+    }
+
+  }).listen(4200);
+  console.log(`Angular running at http://127.0.0.1:${port}/`);
+
+  const start = (process.platform == 'darwin' ? 'open' : process.platform == 'win32' ? 'start' : 'xdg-open');
+  exec(start + ` http://127.0.0.1:${port}/`);
+
+  return {
+    server,
+    wss,
+    broadcast,
+  };
+};
+
 
 const times = [new Date().getTime(), new Date().getTime()];
 
@@ -90,7 +193,9 @@ const indexFileProcessor = {
 
       indexFileContent = indexFileContent.replace(
         /\<\/head\>/gm,
-        `<link rel="stylesheet" href="main.css">\n</head>`
+        `<meta name="time" value="${new Date().getTime()}">
+        <link rel="stylesheet" href="main.css">
+        </head>`
       );
 
       await fs.promises.writeFile(
@@ -120,7 +225,7 @@ let angularComponentDecoratorPlugin = {
       times[0] = new Date().getTime();
     });
 
-    build.onEnd( async () => {
+    build.onEnd(async () => {
       const cssPath = path.join(__dirname, 'dist/esbuild/main.css');
       await fs.promises.writeFile(cssPath, cssCache.join(`\n\n`), 'utf8');
 
@@ -163,7 +268,7 @@ let angularComponentDecoratorPlugin = {
             /^ *styleUrls *\: *\[['"]([^'"\]]*)/gm,
             source
           );
-          scssProcessor( filename.replace(/\.ts$/, '.scss') );
+          scssProcessor(filename.replace(/\.ts$/, '.scss'));
         }
 
         contents = contents.replace(
@@ -199,6 +304,7 @@ const liveServerParams = {
 };
 
 let liveServerIsRunning = false;
+let minimalServer = null;
 build({
   entryPoints: ['src/main.ts'],
   bundle: true,
@@ -215,6 +321,7 @@ build({
       if (error) console.error('watch build failed:', error);
       else {
         console.log('watch build succeeded:', result);
+        minimalServer.broadcast('location:refresh');
       }
     },
   },
@@ -230,7 +337,8 @@ build({
     console.log(k, liveServer[k]);
   }
   if (!liveServerIsRunning) {
-    liveServer.start(liveServerParams);
+    // liveServer.start(liveServerParams);
+    minimalServer = minimalLiveServer('dist/esbuild/');
     liveServerIsRunning = true;
   }
 });
