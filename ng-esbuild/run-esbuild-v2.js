@@ -12,11 +12,55 @@ let cssCache = '';
 
 const sass = require('sass');
 
+let angularSettings = {};
+
+const outDir = path.join(__dirname, 'dist/esbuild');
+
+const copyDir = async (src, dest) => {
+  await fs.promises.mkdir(dest, { recursive: true });
+  let entries = await fs.promises.readdir(src, { withFileTypes: true });
+
+  for (let entry of entries) {
+    let srcPath = path.join(src, entry.name);
+    let destPath = path.join(dest, entry.name);
+
+    entry.isDirectory() ?
+      await copyDir(srcPath, destPath) :
+      await fs.promises.copyFile(srcPath, destPath);
+  }
+};
+
 const isScss = (cssPath) => /\.scss$/.test(cssPath);
 
 const scssProcessor = async scssPath => {
-  const result = sass.renderSync({ file: scssPath });
-  cssCache += `\n\n${result.css.toString()}`;
+  const workDir = path.dirname(scssPath);
+
+  const result = sass.renderSync({
+    file: scssPath,
+    includePaths: [workDir],
+  });
+
+  let cssContent = result.css.toString();
+
+  const matches = cssContent.matchAll(/url\(['"]?([^\)'"\?]*)[\"\?\)]?/gm);
+  for (let match of matches) {
+    if (!/data\:/.test(match[0])) {
+      try {
+        const sourcePath = path.join(workDir, match[1]);
+        const fileName = path.basename(sourcePath);
+        const targetPath = path.join(outDir, fileName);
+        fs.copyFileSync(
+          sourcePath,
+          targetPath,
+        );
+        cssContent = cssContent.replace(match[1], fileName);
+      } catch (e) {
+        console.error('ERROR: ', e);
+      }
+    }
+  }
+
+  cssCache += `\n\n${cssContent}`;
 };
 
 const cssProcessor = async cssPath => {
@@ -182,7 +226,9 @@ const indexFileProcessor = {
 
       indexFileContent = indexFileContent.replace(
         /\<\/body\>/gm,
-        `<script data-version="0.2" src="main.js"></script></body>`
+        `<script data-version="0.2" src="vendor.js"></script>
+        <script data-version="0.2" src="main.js"></script>
+        </body>`
       );
 
       indexFileContent = indexFileContent.replace(
@@ -274,18 +320,21 @@ let angularComponentDecoratorPlugin = {
   },
 };
 
-const cssFinisher = {
-  name: 'angularCssProcessor',
+const settingsResolver = {
+  name: 'angularSettingsResolver',
+  async setup(build) {
+    angularSettings = JSON.parse(await fs.promises.readFile(
+      path.join(__dirname, 'angular.json'),
+      'utf8',
+    ));
+  }
+};
+
+const cssResolver = {
+  name: 'angularCSSProcessor',
   async setup(build) {
     build.onEnd(async () => {
-      const fs = require('fs');
-      const path = require('path');
       let cache = '';
-
-      const angularSettings = JSON.parse(await fs.promises.readFile(
-        path.join(__dirname, 'angular.json'),
-        'utf8',
-      ));
 
       const project = Object.entries(angularSettings.projects)[0][1];
       const baseStylePaths = project.architect.build.options.styles;
@@ -293,13 +342,44 @@ const cssFinisher = {
         const itemPath = item.includes('/')
           ? path.join(__dirname, item)
           : path.join(__dirname, 'src', item);
-        const content = fs.readFileSync(itemPath, 'utf8');
-        cssCache += `\n\n${content}`;
+        scssProcessor(itemPath);
       });
 
       const cssOutputPath = path.join(__dirname, `dist/esbuild/main.css`);
       await fs.promises.writeFile(cssOutputPath, cssCache, 'utf8');
     });
+  }
+};
+
+const jsResolver = {
+  name: 'angularJSProcessor',
+  async setup(build) {
+    build.onEnd(async () => {
+      let cache = '';
+
+      const project = Object.entries(angularSettings.projects)[0][1];
+      const baseStylePaths = project.architect.build.options.scripts;
+      baseStylePaths.forEach((item = '') => {
+        const itemPath = item.includes('/')
+          ? path.join(__dirname, item)
+          : path.join(__dirname, 'src', item);
+        const content = fs.readFileSync(itemPath, 'utf8');
+        cache += `\n\n${content}`;
+      });
+
+      const jsOutputPath = path.join(__dirname, `dist/esbuild/vendor.js`);
+      await fs.promises.writeFile(jsOutputPath, cache, 'utf8');
+    });
+  }
+};
+
+const assetsResolver = {
+  name: 'angularAssestsResolver',
+  async setup(build) {
+    await copyDir(
+      path.join(__dirname, 'src/assets'),
+      path.join(__dirname, 'dist/esbuild/assets'),
+    );
   }
 };
 
@@ -327,14 +407,16 @@ build({
     },
   },
   plugins: [
+    settingsResolver,
     indexFileProcessor,
     zoneJsPlugin,
     angularComponentDecoratorPlugin,
-    cssFinisher,
+    cssResolver,
+    jsResolver,
+    assetsResolver,
   ],
 }).then(async (result) => {
   if (!liveServerIsRunning) {
-    // liveServer.start(liveServerParams);
     minimalServer = minimalLiveServer('dist/esbuild/');
     liveServerIsRunning = true;
   }
