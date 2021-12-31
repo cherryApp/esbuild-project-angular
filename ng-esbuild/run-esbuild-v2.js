@@ -16,6 +16,37 @@ let angularSettings = {};
 
 const outDir = path.join(__dirname, 'dist/esbuild');
 
+const addInjects = (contents) => {
+  if (/constructor *\(([^\)]*)/gm.test(contents)) {
+    let requireInjectImport = false;
+    const matches = contents.matchAll(/constructor *\(([^\)]*)/gm);
+    for (let match of matches) {
+      if (match[1] && /\:/gm.test(match[1])) {
+        requireInjectImport = true;
+        let flat = match[1].replace(/[\n\r]/gm, '');
+        const flatArray = flat.split(',').map(inject => {
+          const parts = inject.split(':');
+          return parts.length === 2
+            ? `@Inject(${parts[1]}) ${inject}`
+            : inject;
+        });
+
+        contents = contents.replace(
+          /constructor *\([^\)]*\)/gm,
+          `constructor(${flatArray.join(',')})`
+        );
+      }
+    }
+
+    if (requireInjectImport && !/Inject.*'@angular\/core.*\;/.test(contents)) {
+      contents = `import { Inject } from '@angular/core';\n\r${contents}`;
+    }
+
+  }
+
+  return contents;
+};
+
 const copyDir = async (src, dest) => {
   await fs.promises.mkdir(dest, { recursive: true });
   let entries = await fs.promises.readdir(src, { withFileTypes: true });
@@ -261,7 +292,7 @@ let angularComponentDecoratorPlugin = {
       console.log(`EsBuild complete in ${times[1] - times[0]}ms`);
     });
 
-    build.onLoad({ filter: /\.component\.ts$/ }, async (args) => {
+    build.onLoad({ filter: /src.*\.component\.ts$/ }, async (args) => {
 
       let getValueByPattern = (regex = new RegExp(''), str = '') => {
         let m;
@@ -302,6 +333,8 @@ let angularComponentDecoratorPlugin = {
             await cssProcessor(filename.replace(/\.ts$/, '.css'));
           }
         }
+
+        contents = addInjects(contents);
 
         contents = contents.replace(
           /^ *templateUrl *\: *['"]*([^'"]*)['"]/gm,
