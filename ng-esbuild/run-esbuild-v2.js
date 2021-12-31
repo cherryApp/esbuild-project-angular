@@ -403,6 +403,7 @@ build({
         console.log('Esbuild: watch build succeeded.');
         timeStamp = new Date().getTime();
         minimalServer.broadcast('location:refresh');
+        cssCache = '';
       }
     },
   },
