@@ -128,7 +128,7 @@ const minimalLiveServer = (root = process.cwd(), port = 4200, socketPort = 8080)
   </script>`;
 
   const server = http.createServer(async (request, response) => {
-    // console.log('request ', request.url);
+    console.log('REQUEST_URL ', request.url);
 
     const headers = {
       "Access-Control-Allow-Origin": "*",
@@ -146,6 +146,9 @@ const minimalLiveServer = (root = process.cwd(), port = 4200, socketPort = 8080)
       filePath = path.join(__dirname, root, request.url);
       isIndexPage = false;
     }
+
+    filePath = filePath.split('?')[0];
+    console.log('FILE_PATH ', filePath);
 
     var extname = String(path.extname(filePath)).toLowerCase();
     var mimeTypes = {
@@ -166,10 +169,13 @@ const minimalLiveServer = (root = process.cwd(), port = 4200, socketPort = 8080)
       '.wasm': 'application/wasm'
     };
 
-    var contentType = mimeTypes[extname] || 'application/octet-stream';
+    const contentType = mimeTypes[extname] || 'application/octet-stream';
+    const encoding = ['.html', '.js', '.css'].includes(extname)
+      ? 'utf8'
+      : null;
 
     try {
-      let content = await fs.promises.readFile(filePath, 'utf8');
+      let content = await fs.promises.readFile(filePath, encoding);
       response.writeHead(200, ({ ...headers, 'Content-Type': contentType }));
       if (isIndexPage) {
         content = content.replace(/\<\/body\>/g, `${clientScript}\n</body>`);
