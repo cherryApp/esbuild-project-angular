@@ -417,6 +417,10 @@ const assetsResolver = {
       path.join(__dirname, 'src/assets'),
       path.join(__dirname, 'dist/esbuild/assets'),
     );
+    await fs.promises.copyFile(
+      path.join(__dirname, 'src/favicon.ico'),
+      path.join(__dirname, 'dist/esbuild/favicon.ico'),
+    );
   }
 };
 
@@ -432,7 +436,7 @@ build({
     '.css': 'text',
   },
   sourcemap: true,
-  minify: false,
+  minify: true,
   watch: {
     onRebuild(error, result) {
       if (error) console.error('Esbuild: watch build failed:', error);
