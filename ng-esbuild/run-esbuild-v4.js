@@ -371,7 +371,7 @@ let angularComponentDecoratorPlugin = {
 const settingsResolver = {
   name: 'angularSettingsResolver',
   async setup(build) {
-    if (!dryRun ) {
+    if ( !dryRun ) {
       return;
     }
 
@@ -501,6 +501,13 @@ const startBuild = (filePath = '') => {
     );
   }
 
+  if ( !lastUpdatedFileList.find(f => /.*angular\.json$/.test(f)) ) {
+    dryRun = true;
+  }
+
+  // Refresh everything.
+  dryRun = true;
+
   clearTimeout(buildTimeout);
 
   if (buildInProgress) {
@@ -510,13 +517,15 @@ const startBuild = (filePath = '') => {
   buildTimeout = setTimeout( () => {
     clearTimeout(buildTimeout);
     times[0] = new Date().getTime();
-    log('7: ', lastUpdatedFileList);
     builder();
   }, 500);
 }
 
 
-const watcher = chokidar.watch(['src/**/*.(css|scss|less|sass|js|ts|tsx|html)'], {
+const watcher = chokidar.watch([
+  'src/**/*.(css|scss|less|sass|js|ts|tsx|html)',
+  'angular.json'
+], {
   ignored: /(^|[\/\\])\../, // ignore dotfiles
   persistent: true
 });
