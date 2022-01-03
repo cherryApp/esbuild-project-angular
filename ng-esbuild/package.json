@@ -3,7 +3,7 @@
   "version": "0.0.3",
   "scripts": {
     "ng": "ng",
-    "start": "node ./run-esbuild-v3.js",
+    "start": "node ./run-esbuild-v4.js",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "esbuild": "esbuild src/main.ts --bundle --outfile=dist/main.js --loader:.html=text",
