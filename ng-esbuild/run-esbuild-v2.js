@@ -128,7 +128,6 @@ const minimalLiveServer = (root = process.cwd(), port = 4200, socketPort = 8080)
   </script>`;
 
   const server = http.createServer(async (request, response) => {
-    console.log('REQUEST_URL ', request.url);
 
     const headers = {
       "Access-Control-Allow-Origin": "*",
@@ -148,7 +147,6 @@ const minimalLiveServer = (root = process.cwd(), port = 4200, socketPort = 8080)
     }
 
     filePath = filePath.split('?')[0];
-    console.log('FILE_PATH ', filePath);
 
     var extname = String(path.extname(filePath)).toLowerCase();
     var mimeTypes = {
