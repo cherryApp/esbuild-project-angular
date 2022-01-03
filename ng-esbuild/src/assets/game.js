@@ -1,1 +1,1 @@
-console.log('assets test');
+console.log('assets test2');

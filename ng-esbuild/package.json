@@ -1,9 +1,9 @@
 {
   "name": "esbuild-ng-cli",
-  "version": "0.0.0",
+  "version": "0.0.3",
   "scripts": {
     "ng": "ng",
-    "start": "node ./run-esbuild-v2.js",
+    "start": "node ./run-esbuild-v3.js",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "esbuild": "esbuild src/main.ts --bundle --outfile=dist/main.js --loader:.html=text",
@@ -33,6 +33,7 @@
     "@swc/core": "^1.2.121",
     "@types/jasmine": "~3.6.0",
     "@types/node": "^12.11.1",
+    "chokidar": "^3.5.2",
     "esbuild": "^0.12.15",
     "jasmine-core": "~3.8.0",
     "karma": "~6.3.0",
