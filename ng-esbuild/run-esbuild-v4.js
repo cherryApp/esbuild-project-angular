@@ -1,13 +1,8 @@
-/**
- * Goal: works with virtual files.
- */
 const chokidar = require('chokidar');
-
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const { exec } = require('child_process');
-
 const { build } = require('esbuild');
 const { WebSocketServer } = require('ws');
 
@@ -16,6 +11,8 @@ const log = console.log;
 let timeStamp = new Date().getTime();
 
 let dryRun = true;
+
+let inMemory = true;
 
 let cssCache = '';
 
@@ -26,6 +23,7 @@ let angularSettings = {};
 const outDir = path.join(__dirname, 'dist/esbuild');
 
 const componentBuffer = {};
+
 
 const getValueByPattern = (regex = new RegExp(''), str = '') => {
   let m;
@@ -69,6 +67,7 @@ const addInjects = (contents) => {
   return contents;
 };
 
+
 const copyDir = async (src, dest) => {
   await fs.promises.mkdir(dest, { recursive: true });
   let entries = await fs.promises.readdir(src, { withFileTypes: true });
@@ -83,7 +82,9 @@ const copyDir = async (src, dest) => {
   }
 };
 
+
 const isScss = (cssPath) => /\.scss$/.test(cssPath);
+
 
 const scssProcessor = async scssPath => {
   const workDir = path.dirname(scssPath);
@@ -223,7 +224,6 @@ const minimalLiveServer = (root = process.cwd(), port = 4200, socketPort = 8080)
     broadcast,
   };
 };
-
 
 const times = [new Date().getTime(), new Date().getTime()];
 
@@ -371,7 +371,7 @@ let angularComponentDecoratorPlugin = {
 const settingsResolver = {
   name: 'angularSettingsResolver',
   async setup(build) {
-    if ( !dryRun ) {
+    if (!dryRun) {
       return;
     }
 
@@ -386,7 +386,7 @@ const cssResolver = {
   name: 'angularCSSProcessor',
   async setup(build) {
     build.onEnd(async () => {
-      if ( !lastUpdatedFileList.find(f => /src(\\|\/).*(\.css|\.scss|\.less|\.sass)$/.test(f)) && !dryRun ) {
+      if (!lastUpdatedFileList.find(f => /src(\\|\/).*(\.css|\.scss|\.less|\.sass)$/.test(f)) && !dryRun) {
         return;
       }
 
@@ -436,7 +436,7 @@ const jsResolver = {
 const assetsResolver = {
   name: 'angularAssestsResolver',
   async setup(build) {
-    if ( !lastUpdatedFileList.find(f => /src\\assets|src\/assets/.test(f)) && !dryRun ) {
+    if (!lastUpdatedFileList.find(f => /src\\assets|src\/assets/.test(f)) && !dryRun) {
       return;
     }
 
@@ -451,6 +451,8 @@ const assetsResolver = {
   }
 };
 
+////////////////////////////////////////////////////////////////////////
+
 let liveServerIsRunning = false;
 let buildInProgress = false;
 let minimalServer = null;
@@ -461,6 +463,7 @@ const builder = () => {
     entryPoints: ['src/main.ts'],
     bundle: true,
     outfile: `dist/esbuild/main.js`,
+    write: !inMemory,
     treeShaking: true,
     loader: {
       '.html': 'text',
@@ -501,7 +504,7 @@ const startBuild = (filePath = '') => {
     );
   }
 
-  if ( !lastUpdatedFileList.find(f => /.*angular\.json$/.test(f)) ) {
+  if (!lastUpdatedFileList.find(f => /.*angular\.json$/.test(f))) {
     dryRun = true;
   }
 
@@ -514,7 +517,7 @@ const startBuild = (filePath = '') => {
     return;
   }
 
-  buildTimeout = setTimeout( () => {
+  buildTimeout = setTimeout(() => {
     clearTimeout(buildTimeout);
     times[0] = new Date().getTime();
     builder();

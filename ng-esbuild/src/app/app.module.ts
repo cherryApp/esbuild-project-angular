@@ -20,3 +20,5 @@ import { NavbarComponent } from './common/navbar/navbar.component';
   bootstrap: [AppComponent]
 })
 export class AppModule { }
+
+// this is a absolutely unnecessary comment
