@@ -5,16 +5,20 @@ import { HttpClientModule} from '@angular/common/http';
 import { AppComponent } from './app.component';
 import { FilterPipe } from './pipe/filter.pipe';
 import { NavbarComponent } from './common/navbar/navbar.component';
+import { AppRoutingModule } from './app-routing.module';
+import { HomeComponent } from './page/home/home.component';
 
 @NgModule({
   declarations: [
     AppComponent,
     FilterPipe,
-    NavbarComponent
+    NavbarComponent,
+    HomeComponent,
   ],
   imports: [
     BrowserModule,
     HttpClientModule,
+    AppRoutingModule,
   ],
   providers: [],
   bootstrap: [AppComponent]
