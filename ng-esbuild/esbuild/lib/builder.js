@@ -10,7 +10,7 @@ module.exports = (options = {}) => {
   const defaultOptions = {
     entryPoints: ['src/main.ts'],
     bundle: true,
-    outfile: path.join(process.cwd(), 'dist/esbuild/main.js'),
+    // outfile: path.join(process.cwd(), 'dist/esbuild/main.js'),
     write: true,
     treeShaking: true,
     loader: {

@@ -21,9 +21,18 @@ module.exports = class FileStore {
   }
 
   async fileWriter(filePath, content, encoding = 'utf8') {
-    log('FILEPATH: ', filePath);
     if (!this.inMemory) {
       await fs.promises.writeFile(filePath, content, encoding);
+    } else {
+      this.pushToInMemoryStore(filePath, content);
+    }
+
+    return filePath;
+  }
+
+  fileWriterSync(filePath, content, encoding = 'utf8') {
+    if (!this.inMemory) {
+      fs.writeFileSync(filePath, content, encoding);
     } else {
       this.pushToInMemoryStore(filePath, content);
     }

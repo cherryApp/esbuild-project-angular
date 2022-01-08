@@ -28,7 +28,7 @@ const indexFileProcessor = (instance) => {
         indexFileContent = indexFileContent.replace(
           /\<\/body\>/gm,
           `<script data-version="0.2" src="vendor.js"></script>
-        <script data-version="0.2" src="main.js"></script>
+        <script data-version="0.2" type="module" src="main.js"></script>
         </body>`
         );
 

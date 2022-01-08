@@ -80,80 +80,82 @@ const moduleBuilder = (modulePath = '', moduleName = '', instance = null) => {
       '.css': 'text',
     },
     sourcemap: true,
-    minify: true,
+    minify: false,
     plugins: [
       angularComponentDecoratorPlugin(instance),
     ],
-    target: 'esnext',
-  }).then( async result => {
+    format: 'esm',
+    preserveSymlinks: true,
+  }).then(async result => {
     const writes = [];
-    result.outputFiles.forEach( async file => {
-      writes.push(instance.store.fileWriter(
+    result.outputFiles.forEach(file => {
+      writes.push(instance.store.fileWriterSync(
         path.join(instance.outDir, path.basename(file.path)).replace(/\.ts/, '.js'),
         `${file.text}; console.log(OrdersModule);`,
       ));
-      // log('result.outputFiles: ', file.text);
     });
 
-    for (let write of writes) {
-      write = await write;
-    }
     return writes;
   });
 };
 
-const handleLoadChildren = (filePath, contents, instance) => {
-  if (!/loadChildren.*\:.*\( *\)/g.test(contents)) {
-    return contents;
-  }
+const handleLoadChildren = async (filePath, contents, instance) => {
 
-  const lazyModules = [];
-  let requireImport = false;
+  let resolver = [];
+  const semafor = new Promise((resolve, reject) => {
+    resolver = resolve;
+  });
 
-  const regex = /loadChildren *\:.*import[ \r\n]*\([ \r\n]*['"`]([^'"`]*)/gmi;
-  let m;
-  const groups = [];
-  while ((m = regex.exec(contents)) !== null) {
-    // This is necessary to avoid infinite loops with zero-width matches
-    if (m.index === regex.lastIndex) {
-      regex.lastIndex++;
+  if (/loadChildren.*\:.*\( *\)/g.test(contents)) {
+
+    const lazyModules = [];
+    let requireImport = false;
+
+    const regex = /loadChildren *\:.*import[ \r\n]*\([ \r\n]*['"`]([^'"`]*)/gmi;
+    let m;
+    const groups = [];
+    while ((m = regex.exec(contents)) !== null) {
+      // This is necessary to avoid infinite loops with zero-width matches
+      if (m.index === regex.lastIndex) {
+        regex.lastIndex++;
+      }
+
+      // The result can be accessed through the `m`-variable.
+      const group = [];
+      m.forEach((match, groupIndex) => {
+        console.log(`Found match, group ${groupIndex}: ${match}`);
+        group[groupIndex] = match;
+      });
+      groups.push(group);
     }
 
-    // The result can be accessed through the `m`-variable.
-    const group = [];
-    m.forEach((match, groupIndex) => {
-      console.log(`Found match, group ${groupIndex}: ${match}`);
-      group[groupIndex] = match;
+    const builds = [];
+    groups.forEach(group => {
+      const tsName = `${group[1]}.ts`;
+      const tsPath = path.join(path.dirname(filePath), tsName);
+      builds.push(moduleBuilder(tsPath, tsName, instance)); var deferreds = [];
     });
-    groups.push(group);
+
+    Promise.all(builds).then(buildList => {
+      groups.forEach(group => {
+        const jsName = path.basename(group[1]);
+        contents = contents.replace(
+          group[0],
+          `loadChildren : () => __esbuild_require__('./${jsName}.js`,
+        )
+      });
+      resolver(contents);
+    });
+  } else {
+    resolver(contents);
   }
 
-  log('9: ', lazyModules);
-  console.log('10: ', contents);
-  groups.forEach(async group => {
-    const tsName = `${group[1]}.ts`;
-    const tsPath = path.join(path.dirname(filePath), tsName);
-    const writes = await moduleBuilder(tsPath, tsName, instance);
-    log('14: ', writes[0]);
-    // lazyModules.push({
-    //   filePath,
-    //   childName: match,
-    //   childPath: path.join(path.dirname(filePath), match.includes('.ts') ? match : `${match}.ts`),
-    // });
-  })
-  // contents = contents.replace(
-  //   /loadChildren *\:[^\,\;]*import[ \r\n]*\(/gm,
-  //   'loadChildren: () => __esbuild_require__('
-  // ).replace()
-  log('11: ', contents);
-
-
-  return contents;
+  return semafor;
 };
 
 /**
-   * Esbuild plugin to changing special angular components.
-   * @returns an esbuild plugin object
+ * Esbuild plugin to changing special angular components.
+ * @returns an esbuild plugin object
    */
 const angularComponentDecoratorPlugin = (instance) => {
   return {
@@ -194,7 +196,7 @@ const angularComponentDecoratorPlugin = (instance) => {
 
           contents = addInjects(contents);
 
-          contents = handleLoadChildren(args.path, contents, instance);
+          // contents = await handleLoadChildren(args.path, contents, instance);
 
           contents = contents.replace(
             /^ *templateUrl *\: *['"]*([^'"]*)['"]/gm,

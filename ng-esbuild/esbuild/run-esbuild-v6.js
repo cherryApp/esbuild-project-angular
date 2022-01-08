@@ -108,6 +108,8 @@ module.exports = class NgEsbuild {
         jsResolver(this),
         assetsResolver(this),
       ],
+      format: 'esm',
+      preserveSymlinks: true,
     }).then(result => {
       if (result.outputFiles) {
         result.outputFiles.forEach(file => {
