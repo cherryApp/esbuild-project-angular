@@ -68,91 +68,6 @@ const addInjects = (contents) => {
   return contents;
 }
 
-const moduleBuilder = (modulePath = '', moduleName = '', instance = null) => {
-  return esBuilder({
-    entryPoints: [modulePath],
-    bundle: true,
-    outfile: moduleName,
-    write: false,
-    treeShaking: true,
-    loader: {
-      '.html': 'text',
-      '.css': 'text',
-    },
-    sourcemap: true,
-    minify: false,
-    plugins: [
-      angularComponentDecoratorPlugin(instance),
-    ],
-    format: 'esm',
-    preserveSymlinks: true,
-  }).then(async result => {
-    const writes = [];
-    result.outputFiles.forEach(file => {
-      writes.push(instance.store.fileWriterSync(
-        path.join(instance.outDir, path.basename(file.path)).replace(/\.ts/, '.js'),
-        `${file.text}; console.log(OrdersModule);`,
-      ));
-    });
-
-    return writes;
-  });
-};
-
-const handleLoadChildren = async (filePath, contents, instance) => {
-
-  let resolver = [];
-  const semafor = new Promise((resolve, reject) => {
-    resolver = resolve;
-  });
-
-  if (/loadChildren.*\:.*\( *\)/g.test(contents)) {
-
-    const lazyModules = [];
-    let requireImport = false;
-
-    const regex = /loadChildren *\:.*import[ \r\n]*\([ \r\n]*['"`]([^'"`]*)/gmi;
-    let m;
-    const groups = [];
-    while ((m = regex.exec(contents)) !== null) {
-      // This is necessary to avoid infinite loops with zero-width matches
-      if (m.index === regex.lastIndex) {
-        regex.lastIndex++;
-      }
-
-      // The result can be accessed through the `m`-variable.
-      const group = [];
-      m.forEach((match, groupIndex) => {
-        console.log(`Found match, group ${groupIndex}: ${match}`);
-        group[groupIndex] = match;
-      });
-      groups.push(group);
-    }
-
-    const builds = [];
-    groups.forEach(group => {
-      const tsName = `${group[1]}.ts`;
-      const tsPath = path.join(path.dirname(filePath), tsName);
-      builds.push(moduleBuilder(tsPath, tsName, instance)); var deferreds = [];
-    });
-
-    Promise.all(builds).then(buildList => {
-      groups.forEach(group => {
-        const jsName = path.basename(group[1]);
-        contents = contents.replace(
-          group[0],
-          `loadChildren : () => __esbuild_require__('./${jsName}.js`,
-        )
-      });
-      resolver(contents);
-    });
-  } else {
-    resolver(contents);
-  }
-
-  return semafor;
-};
-
 /**
  * Esbuild plugin to changing special angular components.
  * @returns an esbuild plugin object
@@ -170,10 +85,15 @@ const angularComponentDecoratorPlugin = (instance) => {
         // Load the file from the file system
         let source = await fs.promises.readFile(args.path, 'utf8');
 
-        // Convert Svelte syntax to JavaScript
+        // Changes.
         try {
 
           let contents = source;
+
+          // Import compiler.
+          if (/module\.ts$/.test(args.path)) {
+            contents = `import '@angular/compiler';\n${contents}`;
+          }
 
           const templateUrl = getValueByPattern(/^ *templateUrl *\: *['"]*([^'"]*)/gm, source);
 
