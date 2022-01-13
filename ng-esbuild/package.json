@@ -22,6 +22,8 @@
     "@angular/router": "~13.1.1",
     "bootstrap": "^5.1.3",
     "font-awesome": "^4.7.0",
+    "laravel-mix": "^6.0.39",
+    "laravel-mix-code-splitter": "^1.0.5",
     "routing": "0.0.2",
     "rxjs": "~7.5.1",
     "tslib": "^2.3.1",

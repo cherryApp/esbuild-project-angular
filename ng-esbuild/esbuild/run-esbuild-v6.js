@@ -90,15 +90,20 @@ module.exports = class NgEsbuild {
     esBuilder({
       entryPoints: ['src/main.ts'],
       bundle: true,
-      outfile: path.join(this.outDir, 'main.js'),
+      // outfile: path.join(this.outDir, 'main.js'),
+
+      outdir: this.outDir,
+      splitting: true,
+      format: 'esm',
+      minify: false,
+      sourcemap: false,
+
       write: !this.inMemory,
       treeShaking: true,
       loader: {
         '.html': 'text',
         '.css': 'text',
       },
-      sourcemap: true,
-      minify: true,
       plugins: [
         settingsResolver(this),
         indexFileProcessor(this),
@@ -108,7 +113,6 @@ module.exports = class NgEsbuild {
         jsResolver(this),
         assetsResolver(this),
       ],
-      format: 'esm',
       preserveSymlinks: true,
     }).then(result => {
       if (result.outputFiles) {
