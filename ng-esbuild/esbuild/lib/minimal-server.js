@@ -47,20 +47,27 @@ module.exports = (
     }
   </script>`;
 
+  const headers = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "OPTIONS, POST, GET, PUT, PATCH, DELETE",
+    "Access-Control-Max-Age": 0, // No Cache
+  };
+
+  const resolveIndexPage = async (response) => {
+    let content = await fs.promises.readFile(
+      path.join(root, 'index.html'),
+      'utf8'
+    );
+    content = content.replace(/\<\/body\>/g, `${clientScript}\n</body>`);
+    response.writeHead(200, ({ ...headers, 'Content-Type': 'text/html' }));
+    response.end(content);
+  };
+
   const server = http.createServer(async (request, response) => {
-
-    const headers = {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "OPTIONS, POST, GET, PUT, PATCH, DELETE",
-      "Access-Control-Max-Age": 0, // No Cache
-    };
-
-    let isIndexPage = false;
 
     let filePath = '.' + request.url;
     if (filePath == './') {
-      filePath = path.join(root, 'index.html');
-      isIndexPage = true;
+      return resolveIndexPage(response);
     } else {
       filePath = path.join(root, request.url);
       isIndexPage = false;
@@ -100,15 +107,13 @@ module.exports = (
     try {
       let content = inMemoryFile || await fs.promises.readFile(filePath, encoding);
       response.writeHead(200, ({ ...headers, 'Content-Type': contentType }));
-      if (isIndexPage) {
-        content = content.replace(/\<\/body\>/g, `${clientScript}\n</body>`);
-      }
       response.end(content);
     } catch (e) {
       if (e.code == 'ENOENT') {
-        log('ENOENT: ', fileBuffer ? Object.keys(fileBuffer) : e);
-        response.writeHead(404, ({ ...headers, 'Content-Type': 'text/html' }));
-        response.end('Page Not Found!', 'utf8');
+        resolveIndexPage(response);
+        // log('ENOENT: ', fileBuffer ? Object.keys(fileBuffer) : e);
+        // response.writeHead(404, ({ ...headers, 'Content-Type': 'text/html' }));
+        // response.end('Page Not Found!', 'utf8');
       } else {
         response.writeHead(500);
         response.end('Sorry, check with the site admin for error: ' + e.code + ', ' + e);
