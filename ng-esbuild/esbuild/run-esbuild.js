@@ -1,224 +1,215 @@
-const { build } = require('esbuild');
-const liveServer = require("live-server");
+/**
+ * Goal: works correctly with loadChildren().
+ */
 const path = require('path');
 const fs = require('fs');
 
-const times = [new Date().getTime(), new Date().getTime()];
+const chokidar = require('chokidar');
+const { build } = require('esbuild');
+const sass = require('sass');
 
-let convertMessage = ({ message, start, end }) => {
-  let location
-  if (start && end) {
-    let lineText = source.split(/\r\n|\r|\n/g)[start.line - 1]
-    let lineEnd = start.line === end.line ? end.column : lineText.length
-    location = {
-      file: filename,
-      line: start.line,
-      column: start.column,
-      length: lineEnd - start.column,
-      lineText,
+const minimalLiveServer = require('./lib/minimal-server');
+const { log, convertMessage } = require('./lib/log');
+const FileStore = require('./lib/file-store');
+const esBuilder = require('./lib/builder');
+
+const zoneJsPlugin = require('./plugin/esbuild-plugin-zonejs');
+const indexFileProcessor = require('./plugin/esbuild-index-file-processor');
+const angularComponentDecoratorPlugin = require('./plugin/esbuild-component-decorator');
+const assetsResolver = require('./plugin/esbuild-assets-resolver');
+const settingsResolver = require('./plugin/esbuild-settings-resolver');
+const cssResolver = require('./plugin/esbuild-css-resolver');
+const jsResolver = require('./plugin/esbuild-js-resolver');
+
+
+module.exports = class NgEsbuild {
+  constructor() {
+
+    this.inMemory = false;
+
+    this.timeStamp = new Date().getTime();
+
+    this.dryRun = true;
+
+    this.cssCache = '';
+
+    this.sass = require('sass');
+
+    this.angularSettings = {};
+
+    this.outPath = 'dist/esbuild';
+
+    this.workDir = process.cwd();
+
+    this.outDir = path.join(this.workDir, this.outPath);
+
+
+    this.store = new FileStore(this.inMemory, this.outPath);
+    this.inMemoryStore = this.store.inMemoryStore;
+
+
+    this.componentBuffer = {};
+
+    this.times = [new Date().getTime(), new Date().getTime()];
+
+    this.liveServerIsRunning = false;
+    this.buildInProgress = false;
+    this.minimalServer = null;
+    this.lastUpdatedFileList = [];
+
+    this.buildTimeout = 0;
+
+    this.initWatcher();
+
+    this.lazyModules = [];
+  }
+
+  initWatcher() {
+    if (!this.inMemory && !fs.existsSync(this.outDir)) {
+      fs.mkdirSync(this.outDir, { recursive: true });
     }
+
+    const watcher = chokidar.watch([
+      'src/**/*.(css|scss|less|sass|js|ts|tsx|html)',
+      'angular.json'
+    ], {
+      ignored: /(^|[\/\\])\../, // ignore dotfiles
+      persistent: true
+    });
+    watcher
+      .on('add', filePath => this.startBuild(filePath))
+      .on('change', filePath => this.startBuild(filePath))
+      .on('unlink', filePath => this.startBuild());
   }
-  return { text: message, location }
-}
 
-const scssPlugin = {
-  name: "scss",
-  setup(build) {
-    const path = require("path")
-    const sass = require("sass")
+  /**
+   * Wrapper method to use esbuild.
+   */
+  builder() {
+    this.buildInProgress = true;
+    esBuilder({
+      entryPoints: ['src/main.ts'],
+      bundle: true,
+      // outfile: path.join(this.outDir, 'main.js'),
 
-    build.onLoad({ filter: /\.scss$/ }, async args => {
-      try {
-        console.log(args.path);
-        const result = sass.renderSync({ file: args.path, });
-        console.log(result.css.toString());
-        return {
-          contents: result.css.toString(),
-          // contents: 'body { color: blue; }',
-          loader: "css",
-        }
-      } catch (e) {
-        return { errors: [convertMessage(e)] }
+      outdir: this.outDir,
+      splitting: true,
+      format: 'esm',
+      minify: false,
+      sourcemap: false,
+
+      write: !this.inMemory,
+      treeShaking: true,
+      loader: {
+        '.html': 'text',
+        '.css': 'text',
+      },
+      plugins: [
+        settingsResolver(this),
+        indexFileProcessor(this),
+        zoneJsPlugin(this),
+        angularComponentDecoratorPlugin(this),
+        cssResolver(this),
+        jsResolver(this),
+        assetsResolver(this),
+      ],
+      preserveSymlinks: true,
+    }).then(result => {
+      if (result.outputFiles) {
+        result.outputFiles.forEach(file => {
+          const key = path.join(this.outDir, path.basename(file.path));
+          this.store.pushToInMemoryStore(key, file.text);
+        });
       }
 
-    })
-  },
-};
-
-const zoneJsPlugin = {
-  name: "zoneJs",
-  setup(build) {
-    const fs = require('fs');
-    build.onLoad({ filter: /main\.ts$/ }, async (args) => {
-      try {
-        const source = await fs.promises.readFile(args.path, 'utf8');
-        const contents = `import 'zone.js';\n${source}`;
-        return { contents, loader: 'ts' };
-      } catch (e) {
-        return { errors: [convertMessage(e)] }
-      }
-    });
-  },
-};
-
-const indexFileProcessor = {
-  name: 'indexProcessor',
-  async setup(build) {
-    build.onStart(async () => {
-      let path = require('path');
-      let fs = require('fs');
-
-      const dirPath = path.join(__dirname, 'dist');
-      if (!fs.existsSync(dirPath)) {
-        fs.mkdirSync(dirPath);
-      }
-
-      let indexFileContent = await fs.promises.readFile(
-        path.join(__dirname, 'src/index.html'),
-        'utf8',
-      );
-
-      console.log(indexFileContent);
-
-      indexFileContent = indexFileContent.replace(
-        /\<\/body\>/gm,
-        `<script src="esbuild-main.js"></script></body>`
-      );
-
-      // indexFileContent = indexFileContent.replace(
-      //   /\<\/head\>/gm,
-      //   `<link rel="stylesheet" href="esbuild-main.css"></head>`
-      // );
-
-      console.log(indexFileContent);
-      await fs.promises.writeFile(
-        path.join(__dirname, 'dist/esbuild-index.html'),
-        indexFileContent,
-        'utf8',
-      );
-    });
-  }
-};
-
-const angularComponentMetaResolver = {
-  name: 'metaResolver',
-  async setup(build) {
-    const path = require('path');
-
-    build.onResolve({ filter: /\.component\.ts$/ }, args => {
-      console.log(args);
-      return { path: args.path };
-    });
-  },
-}
-
-let angularComponentDecoratorPlugin = {
-  name: 'angularDecorator',
-  async setup(build) {
-
-    const cssCache = [];
-
-    build.onStart(() => {
-      console.log('build started');
-      times[0] = new Date().getTime();
-    });
-
-    build.onEnd(() => {
-      times[1] = new Date().getTime();
-      console.log(`EsBuild complete in ${times[1] - times[0]}ms`);
-    });
-
-    build.onLoad({ filter: /\.component\.ts$/ }, async (args) => {
-
-      let getValueByPattern = (regex = new RegExp(''), str = '') => {
-        let m;
-        let results = [];
-
-        while ((array1 = regex.exec(str)) !== null) {
-          results.push(array1[1]);
-        }
-
-        return results.pop();
-      };
-
-      // Load the file from the file system
-      let source = await fs.promises.readFile(args.path, 'utf8');
-      let filename = path.relative(process.cwd(), args.path);
-
-      // Convert Svelte syntax to JavaScript
-      try {
-        const templateUrl = getValueByPattern(/^ *templateUrl *\: *['"]*([^'"]*)/gm, source);
-        const styleUrls = getValueByPattern(/^ *styleUrls *\: *\[['"]([^'"\]]*)/gm, source);
-
-        let contents = source.replace(/\@Component/gmi, `
-          import templateSource from '${templateUrl}';
-          import styleSheet from '${styleUrls}';
-          @Component
-        `);
-
-        contents = contents.replace(
-          /^ *templateUrl *\: *['"]*([^'"]*)['"]/gm,
-          "template: templateSource || ''"
+      if (!this.liveServerIsRunning) {
+        this.minimalServer = minimalLiveServer(
+          `${this.outPath}/`,
+          this.inMemory ? this.inMemoryStore : null
         );
-
-        contents = contents.replace(
-          /^ *styleUrls *\: *\[['"]([^'"\]]*)['"]\]/gm,
-          "styles: [styleSheet || '']"
-        );
-
-        console.log('CONTENTS: ', contents);
-
-        return { contents, loader: 'ts' };
-      } catch (e) {
-        return { errors: [convertMessage(e)] }
+        this.liveServerIsRunning = true;
       }
+      this.buildInProgress = false;
+      this.minimalServer.broadcast('location:refresh');
+      this.lastUpdatedFileList = [];
+      this.cssCache = '';
+      this.dryRun = false;
+
+      this.times[1] = new Date().getTime();
+      log(`EsBuild complete in ${this.times[1] - this.times[0]}ms`);
     });
-  },
-};
-
-const liveServerParams = {
-  port: 8181, // Set the server port. Defaults to 8080.
-  host: "0.0.0.0", // Set the address to bind to. Defaults to 0.0.0.0 or process.env.IP.
-  root: "./dist", // Set root directory that's being served. Defaults to cwd.
-  open: false, // When false, it won't load your browser by default.
-  // ignore: 'scss,my/templates', // comma-separated string for paths to ignore
-  file: "/esbuild-index.html", // When set, serve this file (server root relative) for every 404 (useful for single-page applications)
-  wait: 1000, // Waits for all changes, before reloading. Defaults to 0 sec.
-  // mount: [['/components', './node_modules']], // Mount a directory to a route.
-  logLevel: 2, // 0 = errors only, 1 = some, 2 = lots
-  middleware: [function (req, res, next) { next(); }] // Takes an array of Connect-compatible middleware that are injected into the server middleware stack
-};
-
-let liveServerIsRunning = false;
-build({
-  entryPoints: ['src/main.ts'],
-  bundle: true,
-  outfile: 'dist/esbuild-main.js',
-  treeShaking: true,
-  loader: {
-    '.html': 'text',
-    '.css': 'text',
-  },
-  sourcemap: true,
-  minify: false,
-  watch: {
-    onRebuild(error, result) {
-      if (error) console.error('watch build failed:', error);
-      else {
-
-        console.log('watch build succeeded:', result);
-      }
-    },
-  },
-  plugins: [
-    indexFileProcessor,
-    zoneJsPlugin,
-    scssPlugin,
-    angularComponentDecoratorPlugin,
-  ],
-}).then(async (result) => {
-  if (!liveServerIsRunning) {
-    liveServer.start(liveServerParams);
-    liveServerIsRunning = true;
   }
-});
+
+
+  startBuild(filePath = '') {
+    if (filePath) {
+      this.lastUpdatedFileList.push(
+        path.join(process.cwd(), filePath)
+      );
+    }
+
+    if (!this.lastUpdatedFileList.find(f => /.*angular\.json$/.test(f))) {
+      this.dryRun = true;
+    }
+
+    // Refresh everything.
+    this.dryRun = true;
+
+    clearTimeout(this.buildTimeout);
+
+    if (this.buildInProgress) {
+      return;
+    }
+
+    this.buildTimeout = setTimeout(() => {
+      clearTimeout(this.buildTimeout);
+      this.times[0] = new Date().getTime();
+      this.builder();
+    }, 500);
+  }
+
+  /**
+   * Process .scss and .css files.
+   * @param {String} scssPath path of the scss file
+   */
+  async scssProcessor(scssPath) {
+    const workDir = path.dirname(scssPath);
+
+    const result = sass.renderSync({
+      file: scssPath,
+      includePaths: [workDir],
+    });
+
+    let cssContent = result.css.toString();
+
+    const matches = cssContent.matchAll(/url\(['"]?([^\)'"\?]*)[\"\?\)]?/gm);
+    for (let match of matches) {
+      if (!/data\:/.test(match[0])) {
+        try {
+          const sourcePath = path.join(workDir, match[1]);
+          const fileName = path.basename(sourcePath);
+          const targetPath = path.join(this.outDir, fileName);
+          this.store.fileCopierSync(
+            sourcePath,
+            targetPath,
+          );
+          cssContent = cssContent.replace(match[1], fileName);
+        } catch (e) {
+          console.error('ERROR: ', e);
+        }
+      }
+    }
+
+    this.cssCache += `\n\n${cssContent}`;
+  }
+
+  /**
+   * Read .css content and add it to the cache.
+   * @param {String} cssPath path of the .css file
+   */
+  async cssProcessor(cssPath) {
+    const result = await fs.promises.readFile(cssPath, 'utf8');
+    this.cssCache += `\n\n${result}`;
+  }
+
+};

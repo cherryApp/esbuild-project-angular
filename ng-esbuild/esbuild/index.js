@@ -1,3 +1,3 @@
-const NgEsbuild = require('./run-esbuild-v6');
+const NgEsbuild = require('./run-esbuild');
 
 new NgEsbuild();
